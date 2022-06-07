@@ -158,7 +158,7 @@ public class VRC_Addon_Installer : EditorWindow
         EditorGUILayout.Space();
         EditorGUILayout.Space();
 
-        EditorGUI.BeginDisabledGroup(AddActionsHelpers.isInDraftMode == true);
+        EditorGUI.BeginDisabledGroup(AreThereErrors() == true || AddActionsHelpers.isInDraftMode == true || isGameObjectToInsertIntoValid == false || pathToAsset == "");
         if (GUILayout.Button("Draft Add", GUILayout.Width(100), GUILayout.Height(50)))
         {
             try {
@@ -169,7 +169,7 @@ public class VRC_Addon_Installer : EditorWindow
         }
         EditorGUI.EndDisabledGroup();
 
-        EditorGUI.BeginDisabledGroup(AddActionsHelpers.isInDraftMode == false || AreThereErrors() == true);
+        EditorGUI.BeginDisabledGroup(AreThereErrors() == true || AddActionsHelpers.isInDraftMode == false);
         if (GUILayout.Button("Perform", GUILayout.Width(100), GUILayout.Height(50)))
         {
             try {
@@ -294,8 +294,7 @@ public class VRC_Addon_Installer : EditorWindow
 
         if (GUILayout.Button("Restart", GUILayout.Width(100), GUILayout.Height(50)))
         {
-            ClearActionsAndErrors();
-            CancelDraft();
+            Restart();
         }
         
         EditorGUILayout.Space();
@@ -317,6 +316,14 @@ public class VRC_Addon_Installer : EditorWindow
         EditorGUILayout.EndScrollView();
     }
 
+    void Restart() {
+        ClearActionsAndErrors();
+        CancelDraft();
+        pathToAsset = "";
+        gameObjectToInsertInto = null;
+        gameObjectToRemove = null;
+    }
+
     bool AreThereErrors() {
         return errors.Count > 0;
     }
@@ -326,7 +333,11 @@ public class VRC_Addon_Installer : EditorWindow
             return false;
         }
 
-        var allChildren = sourceVrcAvatarDescriptor.gameObject.GetComponentInChildren<Transform>(true);
+        if (gameObject == sourceVrcAvatarDescriptor.gameObject) {
+            return true;
+        }
+
+        var allChildren = sourceVrcAvatarDescriptor.gameObject.GetComponentsInChildren<Transform>(true);
 
         foreach(Transform child in allChildren) {
             if (child == gameObject.transform) {
@@ -469,7 +480,7 @@ public class VRC_Addon_Installer : EditorWindow
 
         ClearActionsAndErrors();
 
-        List<Action> actions = AddActionsHelpers.InsertAddonFileIntoAvatar(pathToAsset, sourceVrcAvatarDescriptor.gameObject);
+        List<Action> actions = AddActionsHelpers.InsertAddonFileIntoAvatar(pathToAsset, gameObjectToInsertInto);
         Action firstAction = actions[0];
         GameObject importedAsset = (firstAction as InsertGameObjectAction).gameObject;
 
@@ -536,7 +547,7 @@ public class VRC_Addon_Installer : EditorWindow
 
         ClearActionsAndErrors();
 
-        List<Action> actions = AddActionsHelpers.InsertAddonFileIntoAvatar(pathToAsset, sourceVrcAvatarDescriptor.gameObject);
+        List<Action> actions = AddActionsHelpers.InsertAddonFileIntoAvatar(pathToAsset, gameObjectToInsertInto);
         Action firstAction = actions[0];
         GameObject insertedGameObject = (firstAction as InsertGameObjectAction).gameObject;
 
