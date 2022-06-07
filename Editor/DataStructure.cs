@@ -21,8 +21,6 @@ using VRCStation = VRC.SDK3.Avatars.Components.VRCStation;
 using VRC.SDK3.Validation;
 using VRC.Core;
 using VRCSDK2;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace VRCAddonInstaller {
     public class Action {
