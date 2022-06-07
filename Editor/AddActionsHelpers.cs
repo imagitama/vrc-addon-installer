@@ -12,44 +12,49 @@ using UnityEditorInternal;
 
 namespace VRCAddonInstaller {
     public class AddActionsHelpers {
-        public static bool isDraft = true;
+        // must be here so methods can check
+        public static bool isInDraftMode = false;
 
-        // TODO: Support other formats eg. prefabs
-        public static List<Action> InsertAddonFileIntoAvatar(string pathToFbx, GameObject newParentGameObject) {
+        public static List<Action> InsertAddonFileIntoAvatar(string pathToAsset, GameObject newParentGameObject) {
             List<Action> actions = new List<Action>();
 
-            GameObject importedFbx = Utils.LoadAsset<GameObject>(pathToFbx);
+            GameObject importedAsset = Utils.LoadAsset<GameObject>(pathToAsset);
 
-            if (importedFbx == false) {
-                throw new FailedToInsertGameObject("The asset does not seem to exist or is the incorrect format (fbx)");
+            if (importedAsset == false) {
+                throw new FailedToInsertGameObject("The asset does not seem to exist in Assets folder or is the incorrect format") {
+                    pathToAsset = pathToAsset
+                };
             }
 
-            Transform existingTransform = newParentGameObject.transform.Find(importedFbx.name);
+            Transform existingTransform = newParentGameObject.transform.Find(importedAsset.name);
 
             if (existingTransform != null) {
-                throw new FailedToInsertGameObject("There is already a game object in the avatar with the same name");
+                throw new FailedToInsertGameObject("There is already a game object in the avatar with the same name") {
+                    pathToAsset = pathToAsset,
+                    pathToExistingGameObject = Utils.GetGameObjectPath(newParentGameObject) + "/" + importedAsset.name
+                };
             }
 
             string pathToParent = Utils.GetGameObjectPath(newParentGameObject);
-            string finalPath = pathToParent + "/" + importedFbx.name;
+            string finalPath = pathToParent + "/" + importedAsset.name;
 
             Transform transformToInsertInto = newParentGameObject.transform;
 
-            if (isDraft) {
+            if (isInDraftMode) {
                 actions.Add(new InsertGameObjectAction() {
-                    pathToFbx = pathToFbx,
+                    pathToAsset = pathToAsset,
                     pathToParent = pathToParent,
-                    gameObject = importedFbx
+                    gameObject = importedAsset
                 });
 
                 return actions;
             }
 
-            GameObject createdGameObject = UnityEngine.Object.Instantiate(importedFbx, transformToInsertInto);
+            GameObject createdGameObject = UnityEngine.Object.Instantiate(importedAsset, transformToInsertInto);
             createdGameObject.name = createdGameObject.name.Replace("(Clone)", "");
 
             actions.Add(new InsertGameObjectAction() {
-                pathToFbx = pathToFbx,
+                pathToAsset = pathToAsset,
                 pathToParent = pathToParent,
                 gameObject = createdGameObject
             });
@@ -70,9 +75,6 @@ namespace VRCAddonInstaller {
 
             // need to copy the transforms because when we move the bones they no longer become our children (for some reason) so it fails
             foreach (Transform boneToMove in parentOfBonesToMove) {
-                // if (boneToMove.gameObject.name.Contains("_end")) {
-                //     continue;
-                // }
                 bonesToOperateOn.Add(boneToMove);
             }
 
@@ -87,7 +89,7 @@ namespace VRCAddonInstaller {
                 Debug.Log("Searching bone in target \"" + pathToTargetParentBone + "\" for any similar bones to this one...");
 
                 if (targetParentBone == null) {
-                    throw new System.Exception("Target parent bone does not exist at " + pathToTargetParentBone);
+                    throw new FailedToCopyBoneIntoArmature("Target parent bone does not exist at " + pathToTargetParentBone);
                 }
 
                 Transform newParent = null;
@@ -116,7 +118,7 @@ namespace VRCAddonInstaller {
                 string originalPath = Utils.GetGameObjectPath(boneToMove.gameObject);
                 string newParentPath = Utils.GetGameObjectPath(newParent.gameObject);
 
-                if (isDraft == false) {
+                if (isInDraftMode == false) {
                     boneToMove.SetParent(newParent);
                 }
 
@@ -147,7 +149,7 @@ namespace VRCAddonInstaller {
                     newName = newName
                 });
 
-                if (isDraft == false) {
+                if (isInDraftMode == false) {
                     RenameBone(bone, newName);
                 }
             }

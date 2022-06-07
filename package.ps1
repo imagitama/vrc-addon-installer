@@ -6,4 +6,4 @@
     -quit `
     -projectPath ../../../ `
     -exportPackage "Assets/PeanutTools" `
-    "Assets/PeanutTools/VRC_Addon_Installer/peanuttools_vrcaddoninstaller_alpha2.unitypackage"
+    "Assets/PeanutTools/VRC_Addon_Installer/peanuttools_vrcaddoninstaller_VERSION.unitypackage"

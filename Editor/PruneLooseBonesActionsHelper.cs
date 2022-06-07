@@ -12,7 +12,8 @@ using UnityEditorInternal;
 
 namespace VRCAddonInstaller {
     public class PruneLooseBonesActionsHelpers {
-        public static bool isDraft = true;
+        // must be here so methods can check
+        public static bool isInDraftMode = false;
 
         public static List<Action> PruneLooseBones(Transform avatarRoot) {
             List<Action> actions = new List<Action>();
@@ -64,7 +65,7 @@ namespace VRCAddonInstaller {
                     pathToBone = pathToBone
                 });
                 
-                if (isDraft == false) {
+                if (isInDraftMode == false) {
                     GameObject.DestroyImmediate(childToDelete.gameObject);
                 }
             }

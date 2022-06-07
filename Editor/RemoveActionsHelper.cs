@@ -12,7 +12,8 @@ using UnityEditorInternal;
 
 namespace VRCAddonInstaller {
     public class RemoveActionsHelpers {
-        public static bool isDraft = true;
+        // must be here so methods can check
+        public static bool isInDraftMode = false;
 
         // TODO: Recursively look through the gameobject for any skinnedmeshrenderers
         public static List<Action> RemoveBonesFromImmediateSkinnedMeshRenderers(GameObject gameObjectToRemove) {
@@ -38,14 +39,14 @@ namespace VRCAddonInstaller {
         }
 
         public static void RemoveGameObject(GameObject objectToRemove) {
-            if (isDraft) {
+            if (isInDraftMode) {
                 return;
             }
             GameObject.DestroyImmediate(objectToRemove);
         }
 
         public static void RemoveBone(Transform bone) {
-            if (isDraft) {
+            if (isInDraftMode) {
                 return;
             }
             GameObject.DestroyImmediate(bone.gameObject);

@@ -33,8 +33,11 @@ public class VRC_Addon_Installer : EditorWindow
     // actions
     List<Action> actionsToPerform = new List<Action>();
 
+    // errors
+    List<System.Exception> errors = new List<System.Exception>();
+
     // adding
-    string pathToFbx = "";
+    string pathToAsset = "";
     bool isClothing = false;
     string boneSuffix = "";
     [UnityEngine.SerializeField]
@@ -100,24 +103,40 @@ public class VRC_Addon_Installer : EditorWindow
         EditorGUILayout.Space();
         EditorGUILayout.Space();
 
-        GUILayout.Label("Path to FBX:");
-        pathToFbx = EditorGUILayout.TextField(pathToFbx);
+        GUILayout.Label("Path to asset:");
+        pathToAsset = EditorGUILayout.TextField(pathToAsset);
 
         if (GUILayout.Button("Select File", GUILayout.Width(75), GUILayout.Height(25))) {
-            string pathResult = EditorUtility.OpenFilePanel("Select a FBX", Application.dataPath, "fbx");
+            // from https://docs.unity3d.com/2020.1/Documentation/Manual/3D-formats.html
+            string pathResult = EditorUtility.OpenFilePanel("Select a file", Application.dataPath, "fbx,obj,prefab,dae,3ds,ma,mb,max,c4d,blend");
 
             if (pathResult != "") {
-                pathToFbx = Utils.GetPathRelativeToAssets(pathResult);
+                pathToAsset = Utils.GetPathRelativeToAssets(pathResult);
+            }
+        }
+        GUILayout.Label("Note it must be inside your project.", italicStyle);
+
+        EditorGUILayout.Space();
+        EditorGUILayout.Space();
+
+        GameObject oldGameObjectToInsertInto = gameObjectToInsertInto;
+        gameObjectToInsertInto = (GameObject)EditorGUILayout.ObjectField("GameObject to insert into:", gameObjectToInsertInto, typeof(GameObject));
+        GUILayout.Label("The mesh will be inserted into this game object. Can be any GameObject including the root.", italicStyle);
+
+        bool isGameObjectToInsertIntoValid = GetIsGameObjectTargetValid(gameObjectToInsertInto);
+
+        if (oldGameObjectToInsertInto != gameObjectToInsertInto) {
+            ClearActionsAndErrors();
+
+            if (gameObjectToInsertInto != null && isGameObjectToInsertIntoValid == false) {
+                EditorGUILayout.Space();
+                EditorGUILayout.Space();
+                
+                AddError(new System.Exception("The GameObject is not a child of your avatar"));
             }
         }
 
-        EditorGUILayout.Space();
-        EditorGUILayout.Space();
-
-        gameObjectToInsertInto = (GameObject)EditorGUILayout.ObjectField("Game object to insert into:", gameObjectToInsertInto, typeof(GameObject));
-        GUILayout.Label("The mesh in the FBX will be inserted into this game object. Can be the root avatar or any bone.", italicStyle);
-
-        EditorGUI.BeginDisabledGroup(gameObjectToInsertInto == null);
+        EditorGUI.BeginDisabledGroup(isGameObjectToInsertIntoValid == false);
 
         EditorGUILayout.Space();
         EditorGUILayout.Space();
@@ -139,17 +158,25 @@ public class VRC_Addon_Installer : EditorWindow
         EditorGUILayout.Space();
         EditorGUILayout.Space();
 
-        EditorGUI.BeginDisabledGroup(AddActionsHelpers.isDraft == true);
+        EditorGUI.BeginDisabledGroup(AddActionsHelpers.isInDraftMode == true);
         if (GUILayout.Button("Draft Add", GUILayout.Width(100), GUILayout.Height(50)))
         {
-            DraftAddAddon();
+            try {
+                DraftAddAddon();
+            } catch (System.Exception exception) {
+                AddError(exception);
+            }
         }
         EditorGUI.EndDisabledGroup();
 
-        EditorGUI.BeginDisabledGroup(AddActionsHelpers.isDraft == false);
+        EditorGUI.BeginDisabledGroup(AddActionsHelpers.isInDraftMode == false || AreThereErrors() == true);
         if (GUILayout.Button("Perform", GUILayout.Width(100), GUILayout.Height(50)))
         {
-            AddAddon();
+            try {
+                AddAddon();
+            } catch (System.Exception exception) {
+                AddError(exception);
+            }
         }
         EditorGUI.EndDisabledGroup();
 
@@ -180,7 +207,7 @@ public class VRC_Addon_Installer : EditorWindow
         GUILayout.Label("The game object and any bones that belong to immediate child skinned mesh renderers will be removed.", italicStyle);
 
         if (originalGameObjectToRemove != gameObjectToRemove) {
-            ClearActions();
+            ClearActionsAndErrors();
             CancelDraft();
         }
         
@@ -189,17 +216,25 @@ public class VRC_Addon_Installer : EditorWindow
 
         EditorGUI.BeginDisabledGroup(gameObjectToRemove == null);
 
-        EditorGUI.BeginDisabledGroup(RemoveActionsHelpers.isDraft == true);
+        EditorGUI.BeginDisabledGroup(RemoveActionsHelpers.isInDraftMode == true);
         if (GUILayout.Button("Draft Remove", GUILayout.Width(100), GUILayout.Height(50)))
         {
-            DraftRemoveAddon();
+            try {
+                DraftRemoveAddon();
+            } catch (System.Exception exception) {
+                AddError(exception);
+            }
         }
         EditorGUI.EndDisabledGroup();
 
-        EditorGUI.BeginDisabledGroup(RemoveActionsHelpers.isDraft == false);
+        EditorGUI.BeginDisabledGroup(RemoveActionsHelpers.isInDraftMode == false || AreThereErrors() == true);
         if (GUILayout.Button("Perform", GUILayout.Width(100), GUILayout.Height(50)))
         {
-            RemoveAddon();
+            try {
+                RemoveAddon();
+            } catch (System.Exception exception) {
+                AddError(exception);
+            }
         }
         EditorGUI.EndDisabledGroup();
 
@@ -222,21 +257,30 @@ public class VRC_Addon_Installer : EditorWindow
         EditorGUI.BeginDisabledGroup(sourceVrcAvatarDescriptor == null);
         
         GUILayout.Label("Prune loose bones", EditorStyles.boldLabel);
+        GUILayout.Label("Finds any GameObjects that have no components and are not bones.", italicStyle);
 
         EditorGUILayout.Space();
         EditorGUILayout.Space();
 
-        EditorGUI.BeginDisabledGroup(PruneLooseBonesActionsHelpers.isDraft == true);
+        EditorGUI.BeginDisabledGroup(PruneLooseBonesActionsHelpers.isInDraftMode == true);
         if (GUILayout.Button("Draft Prune", GUILayout.Width(100), GUILayout.Height(50)))
         {
-            DraftPruneLooseBones();
+            try {
+                DraftPruneLooseBones();
+            } catch (System.Exception exception) {
+                AddError(exception);
+            }
         }
         EditorGUI.EndDisabledGroup();
 
-        EditorGUI.BeginDisabledGroup(PruneLooseBonesActionsHelpers.isDraft == false);
+        EditorGUI.BeginDisabledGroup(PruneLooseBonesActionsHelpers.isInDraftMode == false || AreThereErrors() == true);
         if (GUILayout.Button("Prune", GUILayout.Width(100), GUILayout.Height(50)))
         {
-            PruneLooseBones();
+            try {
+                PruneLooseBones();
+            } catch (System.Exception exception) {
+                AddError(exception);
+            }
         }
         GUILayout.Label("", italicStyle);
         EditorGUI.EndDisabledGroup();
@@ -250,11 +294,14 @@ public class VRC_Addon_Installer : EditorWindow
 
         if (GUILayout.Button("Restart", GUILayout.Width(100), GUILayout.Height(50)))
         {
+            ClearActionsAndErrors();
             CancelDraft();
         }
         
         EditorGUILayout.Space();
         EditorGUILayout.Space();
+
+        RenderErrors();
 
         RenderActions();
 
@@ -270,10 +317,66 @@ public class VRC_Addon_Installer : EditorWindow
         EditorGUILayout.EndScrollView();
     }
 
+    bool AreThereErrors() {
+        return errors.Count > 0;
+    }
+
+    bool GetIsGameObjectTargetValid(GameObject gameObject) {
+        if (gameObject == null) {
+            return false;
+        }
+
+        var allChildren = sourceVrcAvatarDescriptor.gameObject.GetComponentInChildren<Transform>(true);
+
+        foreach(Transform child in allChildren) {
+            if (child == gameObject.transform) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
     void CancelDraft() {
-        AddActionsHelpers.isDraft = false;
-        RemoveActionsHelpers.isDraft = false;
-        PruneLooseBonesActionsHelpers.isDraft = false;
+        AddActionsHelpers.isInDraftMode = false;
+        RemoveActionsHelpers.isInDraftMode = false;
+        PruneLooseBonesActionsHelpers.isInDraftMode = false;
+    }
+
+    void AddError(System.Exception exception) {
+        errors.Add(exception);
+    }
+
+    void RenderErrors() {
+        if (errors.Count == 0) {
+            return;
+        }
+
+        EditorGUILayout.Space();
+        EditorGUILayout.Space();
+
+        GUILayout.Label("Errors:");
+
+        GUIStyle guiStyle = new GUIStyle() {
+            // fontSize = 10
+        };
+        guiStyle.normal.textColor = Color.red;
+
+        foreach (System.Exception exception in errors) {
+            string message = "";
+
+            // TODO: Move to the exceptions themselves (add toString method)
+            if (exception is FailedToInsertGameObject) {
+                string pathToExistingGameObject = (exception as FailedToInsertGameObject).pathToExistingGameObject;
+                message = message + "Failed to insert GameObject: " + exception.Message + "\nImport path: " + (exception as FailedToInsertGameObject).pathToAsset + (pathToExistingGameObject != "" ? "\nExisting object: " + pathToExistingGameObject : "");
+            } else if (exception is FailedToCopyBoneIntoArmature) {
+                message = message + "Failed to copy bone into armature: " + exception.Message + "\nBone source: " + (exception as FailedToCopyBoneIntoArmature).pathToBone + "\nTarget: " + (exception as FailedToCopyBoneIntoArmature).pathToTarget;
+            } else {
+                message = exception.Message;
+            }
+
+            GUILayout.Label(message, guiStyle);
+        }
     }
 
     void RenderLink(string label, string url) {
@@ -328,10 +431,10 @@ public class VRC_Addon_Installer : EditorWindow
             
             label = "Rename bone " + originalPathToBone + " from " + originalName + " to " + newName;
         } else if (action is InsertGameObjectAction) {
-            string pathToFbx = (action as InsertGameObjectAction).pathToFbx;
+            string pathToAsset = (action as InsertGameObjectAction).pathToAsset;
             string pathToParent = (action as InsertGameObjectAction).pathToParent;
            
-            label = "Insert game object " + pathToFbx + " into " + pathToParent;
+            label = "Insert game object " + pathToAsset + " into " + pathToParent;
         } else if (action is RemoveGameObjectAction) {
             string pathToGameObject = (action as RemoveGameObjectAction).pathToGameObject;
             
@@ -355,14 +458,20 @@ public class VRC_Addon_Installer : EditorWindow
         Debug.Log("Adding " + newActions.Count + " actions");
         actionsToPerform.AddRange(newActions);
     }
+    
+    void ClearActionsAndErrors() {
+        actionsToPerform = new List<Action>();
+        errors = new List<System.Exception>();
+    }
 
     void DraftAddAddon() {
-        AddActionsHelpers.isDraft = true;
-        ClearActions();
+        AddActionsHelpers.isInDraftMode = true;
 
-        List<Action> actions = AddActionsHelpers.InsertAddonFileIntoAvatar(pathToFbx, sourceVrcAvatarDescriptor.gameObject);
+        ClearActionsAndErrors();
+
+        List<Action> actions = AddActionsHelpers.InsertAddonFileIntoAvatar(pathToAsset, sourceVrcAvatarDescriptor.gameObject);
         Action firstAction = actions[0];
-        GameObject importedFbx = (firstAction as InsertGameObjectAction).gameObject;
+        GameObject importedAsset = (firstAction as InsertGameObjectAction).gameObject;
 
         AddActions(actions);
 
@@ -376,7 +485,7 @@ public class VRC_Addon_Installer : EditorWindow
                 throw new System.Exception("Failed to find avatar armature!");
             }
 
-            SkinnedMeshRenderer skinnedMeshRenderer = Utils.GetSkinnedMeshRendererFromAnyChild(importedFbx.transform);
+            SkinnedMeshRenderer skinnedMeshRenderer = Utils.GetSkinnedMeshRendererFromAnyChild(importedAsset.transform);
 
             if (skinnedMeshRenderer == null) {
                 throw new System.Exception("Could not find skinned mesh renderer!");
@@ -400,7 +509,7 @@ public class VRC_Addon_Installer : EditorWindow
             Transform fakeFirstBoneTransform = fakeFirstBoneGameObject.transform;
 
             // we need it to think it is real as we are using a virtual armature
-            AddActionsHelpers.isDraft = false;
+            AddActionsHelpers.isInDraftMode = false;
             AddActions(
                 AddActionsHelpers.CopyBonesIntoArmature(
                     avatarBones[0].gameObject.name, 
@@ -408,11 +517,11 @@ public class VRC_Addon_Installer : EditorWindow
                     fakeFirstBoneTransform
                 )
             );
-            AddActionsHelpers.isDraft = true;
+            AddActionsHelpers.isInDraftMode = true;
 
             AddActions(AddActionsHelpers.RenameBones(
                 importedBones,
-                importedFbx,
+                importedAsset,
                 boneSuffix
             ));
 
@@ -422,15 +531,12 @@ public class VRC_Addon_Installer : EditorWindow
         }
     }
 
-    void ClearActions() {
-        actionsToPerform = new List<Action>();
-    }
-
     void AddAddon() {
-        AddActionsHelpers.isDraft = false;
-        ClearActions();
+        AddActionsHelpers.isInDraftMode = false;
 
-        List<Action> actions = AddActionsHelpers.InsertAddonFileIntoAvatar(pathToFbx, sourceVrcAvatarDescriptor.gameObject);
+        ClearActionsAndErrors();
+
+        List<Action> actions = AddActionsHelpers.InsertAddonFileIntoAvatar(pathToAsset, sourceVrcAvatarDescriptor.gameObject);
         Action firstAction = actions[0];
         GameObject insertedGameObject = (firstAction as InsertGameObjectAction).gameObject;
 
@@ -458,8 +564,9 @@ public class VRC_Addon_Installer : EditorWindow
     }
 
     void DraftRemoveAddon() {
-        RemoveActionsHelpers.isDraft = true;
-        ClearActions();
+        RemoveActionsHelpers.isInDraftMode = true;
+
+        ClearActionsAndErrors();
 
         AddActions(RemoveActionsHelpers.RemoveBonesFromImmediateSkinnedMeshRenderers(gameObjectToRemove));
 
@@ -471,23 +578,26 @@ public class VRC_Addon_Installer : EditorWindow
     }
     
     void RemoveAddon() {
-        RemoveActionsHelpers.isDraft = false;
-        ClearActions();
+        RemoveActionsHelpers.isInDraftMode = false;
+
+        ClearActionsAndErrors();
         
         RemoveActionsHelpers.RemoveBonesFromImmediateSkinnedMeshRenderers(gameObjectToRemove);
         RemoveActionsHelpers.RemoveGameObject(gameObjectToRemove);
     }
 
     void DraftPruneLooseBones() {
-        PruneLooseBonesActionsHelpers.isDraft = true;
-        ClearActions();
+        PruneLooseBonesActionsHelpers.isInDraftMode = true;
+
+        ClearActionsAndErrors();
 
         AddActions(PruneLooseBonesActionsHelpers.PruneLooseBones(sourceVrcAvatarDescriptor.transform));
     }
     
     void PruneLooseBones() {
-        PruneLooseBonesActionsHelpers.isDraft = false;
-        ClearActions();
+        PruneLooseBonesActionsHelpers.isInDraftMode = false;
+
+        ClearActionsAndErrors();
 
         PruneLooseBonesActionsHelpers.PruneLooseBones(sourceVrcAvatarDescriptor.transform);
     }

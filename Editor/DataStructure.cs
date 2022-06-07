@@ -38,7 +38,7 @@ namespace VRCAddonInstaller {
     }
 
     public class InsertGameObjectAction : Action {
-        public string pathToFbx;
+        public string pathToAsset;
         public string pathToParent;
         public GameObject gameObject;
     }
