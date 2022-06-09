@@ -103,8 +103,6 @@ namespace VRCAddonInstaller {
                 throw new System.Exception("Cannot get root of bones without bones!");
             }
 
-            Debug.Log("Getting root of " + boneTransforms.Length + " bones...");
-
             Transform firstBoneTransform = boneTransforms[0];
 
             string absolutePathToFirstBone = GetGameObjectPath(firstBoneTransform.gameObject);

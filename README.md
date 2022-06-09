@@ -12,5 +12,5 @@ It can do the following:
 
 ## Ideas for future
 
-- allow importing .prefab, .obj and other formats
 - prune individual loose bones
+- add way to add missing bones so armatures align

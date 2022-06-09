@@ -39,6 +39,8 @@ public class VRC_Addon_Installer : EditorWindow
     // adding
     string pathToAsset = "";
     bool isClothing = false;
+    string existingSuffix = "";
+    bool needToAddSuffix = true;
     string boneSuffix = "";
     [UnityEngine.SerializeField]
     GameObject gameObjectToInsertInto;
@@ -65,6 +67,12 @@ public class VRC_Addon_Installer : EditorWindow
        EditorGUI.DrawRect(rect, new Color ( 0.5f,0.5f,0.5f, 1 ) );
     }
 
+    void HandleError(System.Exception exception) {
+        Debug.LogException(exception);
+        AddError(exception);
+        CleanupTempGameObject();
+    }
+
     void OnGUI()
     {
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
@@ -85,7 +93,12 @@ public class VRC_Addon_Installer : EditorWindow
 
         GUILayout.Label("Select your avatar", EditorStyles.boldLabel);
 
+        VRCAvatarDescriptor oldSourceVrcAvatarDescriptor = sourceVrcAvatarDescriptor;
         sourceVrcAvatarDescriptor = (VRCAvatarDescriptor)EditorGUILayout.ObjectField("Avatar", sourceVrcAvatarDescriptor, typeof(VRCAvatarDescriptor));
+
+        if (sourceVrcAvatarDescriptor != oldSourceVrcAvatarDescriptor && sourceVrcAvatarDescriptor != null) {
+            gameObjectToInsertInto = sourceVrcAvatarDescriptor.gameObject;
+        }
         
         EditorGUILayout.Space();
         EditorGUILayout.Space();
@@ -112,6 +125,8 @@ public class VRC_Addon_Installer : EditorWindow
 
             if (pathResult != "") {
                 pathToAsset = Utils.GetPathRelativeToAssets(pathResult);
+                existingSuffix = "";
+                ForceRefresh();
             }
         }
         GUILayout.Label("Note it must be inside your project.", italicStyle);
@@ -132,7 +147,7 @@ public class VRC_Addon_Installer : EditorWindow
                 EditorGUILayout.Space();
                 EditorGUILayout.Space();
                 
-                AddError(new System.Exception("The GameObject is not a child of your avatar"));
+                HandleError(new System.Exception("The GameObject is not a child of your avatar"));
             }
         }
 
@@ -142,17 +157,32 @@ public class VRC_Addon_Installer : EditorWindow
         EditorGUILayout.Space();
 
         isClothing = EditorGUILayout.Toggle("Is clothing", isClothing);
-        GUILayout.Label("Enabling this will merge the bones into your armature so your clothing moves with your body.", italicStyle);
+        GUILayout.Label("Merge the bones into your armature so your clothing moves with your body.", italicStyle);
 
         if (isClothing) {
             EditorGUILayout.Space();
             EditorGUILayout.Space();
 
-            GUILayout.Label("Bone suffix (if not set):");
+            GUILayout.Label("Existing suffix (including any underscores):");
+            existingSuffix = EditorGUILayout.TextField(existingSuffix);
+            GUILayout.Label("If you know the bones have a suffix then the merge will not work without it.", italicStyle);
+
+            if (GUILayout.Button("Detect", GUILayout.Width(50), GUILayout.Height(25))) {
+                DetectSuffix();
+            }
+
+            EditorGUILayout.Space();
+
+            needToAddSuffix = EditorGUILayout.Toggle("Add suffix", needToAddSuffix);
+            GUILayout.Label("Will add a suffix to the end of ALL bones to help identify them.", italicStyle);
+
+            EditorGUI.BeginDisabledGroup(needToAddSuffix == false);
+
+            GUILayout.Label("Bone suffix:");
             boneSuffix = EditorGUILayout.TextField(boneSuffix);
-            GUILayout.Label("Add a suffix to help you identify the bones.", italicStyle);
-            GUILayout.Label("Leave blank to generate using the accessory name (eg. RexouiumShirt would be \"Hips_RS\").", italicStyle);
-            GUILayout.Label("Your suffix will be ignored if the bones already have them.", italicStyle);
+            GUILayout.Label("Leave blank to generate using root name (eg. RexouiumShirt would be \"Hips_RS\").", italicStyle);
+            
+            EditorGUI.EndDisabledGroup();
         }
         
         EditorGUILayout.Space();
@@ -164,7 +194,8 @@ public class VRC_Addon_Installer : EditorWindow
             try {
                 DraftAddAddon();
             } catch (System.Exception exception) {
-                AddError(exception);
+
+                HandleError(exception);
             }
         }
         EditorGUI.EndDisabledGroup();
@@ -175,7 +206,7 @@ public class VRC_Addon_Installer : EditorWindow
             try {
                 AddAddon();
             } catch (System.Exception exception) {
-                AddError(exception);
+                HandleError(exception);
             }
         }
         EditorGUI.EndDisabledGroup();
@@ -222,7 +253,7 @@ public class VRC_Addon_Installer : EditorWindow
             try {
                 DraftRemoveAddon();
             } catch (System.Exception exception) {
-                AddError(exception);
+                HandleError(exception);
             }
         }
         EditorGUI.EndDisabledGroup();
@@ -233,7 +264,7 @@ public class VRC_Addon_Installer : EditorWindow
             try {
                 RemoveAddon();
             } catch (System.Exception exception) {
-                AddError(exception);
+                HandleError(exception);
             }
         }
         EditorGUI.EndDisabledGroup();
@@ -268,7 +299,7 @@ public class VRC_Addon_Installer : EditorWindow
             try {
                 DraftPruneLooseBones();
             } catch (System.Exception exception) {
-                AddError(exception);
+                HandleError(exception);
             }
         }
         EditorGUI.EndDisabledGroup();
@@ -279,7 +310,7 @@ public class VRC_Addon_Installer : EditorWindow
             try {
                 PruneLooseBones();
             } catch (System.Exception exception) {
-                AddError(exception);
+                HandleError(exception);
             }
         }
         GUILayout.Label("", italicStyle);
@@ -316,12 +347,33 @@ public class VRC_Addon_Installer : EditorWindow
         EditorGUILayout.EndScrollView();
     }
 
+    void DetectSuffix() {
+        GameObject importedAsset = Utils.LoadAsset<GameObject>(pathToAsset);
+        Transform armature = Utils.FindArmature(importedAsset.transform);
+        Transform firstBone = armature.GetChild(0);
+        string boneName = firstBone.gameObject.name;
+
+        Debug.Log("Detecting suffix using 1st bone \"" + boneName + "\"...");
+
+        if (boneName.Count(f => (f == '_')) != 1) {
+            return;
+        }
+
+        string[] chunks = boneName.Split('_');
+        string suffix = chunks[1];
+
+        existingSuffix = "_" + suffix;
+
+        ForceRefresh();
+    }
+
+    void ForceRefresh() {
+        GUI.FocusControl(null);
+    }
+
     void Restart() {
         ClearActionsAndErrors();
         CancelDraft();
-        pathToAsset = "";
-        gameObjectToInsertInto = null;
-        gameObjectToRemove = null;
     }
 
     bool AreThereErrors() {
@@ -486,60 +538,76 @@ public class VRC_Addon_Installer : EditorWindow
 
         AddActions(actions);
 
-        if (isClothing) {
-            Debug.Log("Is clothing so merging into armature...");
+        if (isClothing == false) {
+            return;
+        }
 
-            Transform[] avatarBones = Utils.GetSkinnedMeshRendererFromAnyChild(sourceVrcAvatarDescriptor.transform).bones;
-            Transform armature = Utils.GetRootOfBones(avatarBones);
+        Debug.Log("Is clothing so merging into armature...");
 
-            if (armature == null) {
-                throw new System.Exception("Failed to find avatar armature!");
-            }
+        Transform[] avatarBones = Utils.GetSkinnedMeshRendererFromAnyChild(sourceVrcAvatarDescriptor.transform).bones;
+        Transform armature = Utils.GetRootOfBones(avatarBones);
 
-            SkinnedMeshRenderer skinnedMeshRenderer = Utils.GetSkinnedMeshRendererFromAnyChild(importedAsset.transform);
+        if (armature == null) {
+            throw new System.Exception("Failed to find avatar armature!");
+        }
 
-            if (skinnedMeshRenderer == null) {
-                throw new System.Exception("Could not find skinned mesh renderer!");
-            }
+        SkinnedMeshRenderer skinnedMeshRenderer = Utils.GetSkinnedMeshRendererFromAnyChild(importedAsset.transform);
 
-            Transform[] importedBones = skinnedMeshRenderer.bones;
-        
-            Transform firstBone = importedBones[0];
-            Transform targetArmature = Utils.FindArmature(sourceVrcAvatarDescriptor.transform);
+        if (skinnedMeshRenderer == null) {
+            throw new System.Exception("Could not find skinned mesh renderer!");
+        }
 
-            if (targetArmature == null) {
-                throw new System.Exception("Armature not detected!");
-            }
+        Transform[] importedBones = skinnedMeshRenderer.bones;
+    
+        Transform firstBone = importedBones[0];
+        Transform targetArmature = Utils.FindArmature(sourceVrcAvatarDescriptor.transform);
 
-            GameObject fakeArmatureGameObject = UnityEngine.Object.Instantiate(armature.gameObject);
-            fakeArmatureGameObject.name = fakeArmatureGameObject.name.Replace("(Clone)", "");
-            Transform fakeArmatureTransform = fakeArmatureGameObject.transform;
+        if (targetArmature == null) {
+            throw new System.Exception("Armature not detected!");
+        }
 
-            GameObject fakeFirstBoneGameObject = UnityEngine.Object.Instantiate(firstBone.gameObject, fakeArmatureTransform);
-            fakeFirstBoneGameObject.name = fakeFirstBoneGameObject.name.Replace("(Clone)", "");
-            Transform fakeFirstBoneTransform = fakeFirstBoneGameObject.transform;
+        CleanupTempGameObject();
 
-            // we need it to think it is real as we are using a virtual armature
-            AddActionsHelpers.isInDraftMode = false;
-            AddActions(
-                AddActionsHelpers.CopyBonesIntoArmature(
-                    avatarBones[0].gameObject.name, 
-                    fakeArmatureTransform, 
-                    fakeFirstBoneTransform
-                )
-            );
-            AddActionsHelpers.isInDraftMode = true;
+        GameObject tempGameObject = CreateTempGameObject();
 
+        // warning this creates them in the root of the scene
+        GameObject fakeArmatureGameObject = UnityEngine.Object.Instantiate(armature.gameObject, tempGameObject.transform);
+        fakeArmatureGameObject.name = fakeArmatureGameObject.name.Replace("(Clone)", "");
+        Transform fakeArmatureTransform = fakeArmatureGameObject.transform;
+
+        // the name is important for output
+        Transform importedArmature = Utils.FindArmature(importedAsset.transform);
+        GameObject fakeImportedArmature = new UnityEngine.GameObject(importedArmature.gameObject.name);
+        fakeImportedArmature.transform.parent = tempGameObject.transform;
+
+        GameObject fakeFirstBoneGameObject = UnityEngine.Object.Instantiate(firstBone.gameObject, fakeImportedArmature.transform);
+        fakeFirstBoneGameObject.name = fakeFirstBoneGameObject.name.Replace("(Clone)", "");
+        Transform fakeFirstBoneTransform = fakeFirstBoneGameObject.transform;
+
+        AddActionsHelpers.IsFirstBone = true;
+
+        // we need it to think it is real as we are using a virtual armature
+        AddActionsHelpers.isInDraftMode = false;
+        AddActions(
+            AddActionsHelpers.CopyBonesIntoArmature(
+                "", 
+                fakeArmatureTransform, 
+                fakeImportedArmature.transform,
+                fakeImportedArmature.transform.name,
+                existingSuffix
+            )
+        );
+        AddActionsHelpers.isInDraftMode = true;
+
+        if (needToAddSuffix) {
             AddActions(AddActionsHelpers.RenameBones(
                 importedBones,
                 importedAsset,
                 boneSuffix
             ));
-
-            // TODO: If error happens this wont be cleaned up
-            DestroyImmediate(fakeArmatureGameObject);
-            DestroyImmediate(fakeFirstBoneGameObject);
         }
+
+        CleanupTempGameObject();
     }
 
     void AddAddon() {
@@ -557,20 +625,26 @@ public class VRC_Addon_Installer : EditorWindow
             Transform importedArmature = Utils.FindArmature(insertedGameObject.transform);
             Transform targetArmature = Utils.FindArmature(sourceVrcAvatarDescriptor.transform);
 
+            AddActionsHelpers.IsFirstBone = true;
+
             AddActionsHelpers.CopyBonesIntoArmature(
                 "", 
                 targetArmature, 
-                importedArmature
+                importedArmature,
+                targetArmature.gameObject.name,
+                existingSuffix
             );
             
             SkinnedMeshRenderer skinnedMeshRenderer = Utils.GetSkinnedMeshRendererFromAnyChild(insertedGameObject.transform);
             Transform[] importedBones = skinnedMeshRenderer.bones;
 
-            AddActionsHelpers.RenameBones(
-                importedBones,
-                insertedGameObject,
-                boneSuffix
-            );
+            if (needToAddSuffix) {
+                AddActionsHelpers.RenameBones(
+                    importedBones,
+                    insertedGameObject,
+                    boneSuffix
+                );
+            }
         }
     }
 
@@ -611,5 +685,17 @@ public class VRC_Addon_Installer : EditorWindow
         ClearActionsAndErrors();
 
         PruneLooseBonesActionsHelpers.PruneLooseBones(sourceVrcAvatarDescriptor.transform);
+    }
+
+    void CleanupTempGameObject() {
+        GameObject temporaryGameObject = GameObject.Find("/VRC_Addon_Installer");
+
+        if (temporaryGameObject != null) {
+            DestroyImmediate(temporaryGameObject);
+        }
+    }
+
+    GameObject CreateTempGameObject() {
+        return new UnityEngine.GameObject("VRC_Addon_Installer");
     }
 }

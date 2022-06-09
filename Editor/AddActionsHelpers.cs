@@ -62,42 +62,61 @@ namespace VRCAddonInstaller {
             return actions;
         }
 
-        public static List<Action> CopyBonesIntoArmature(string currentPathInsideTargetArmature, Transform targetArmature, Transform parentOfBonesToMove) {
+        public class MoveBoneOperation {
+            public Transform bone;
+            public string name;
+            public string path;
+        }
+
+        public static bool IsFirstBone = true;
+
+        public static List<Action> CopyBonesIntoArmature(string currentPathInsideTargetArmature, Transform targetArmature, Transform parentOfBonesToMove, string currentPathInsideMesh, string existingSuffix = "") {
             List<Action> actionsToReturn = new List<Action>();
 
-            Debug.Log("Copying " + parentOfBonesToMove.childCount + " bones (" + currentPathInsideTargetArmature + ")...");
+            Debug.Log("Starting to copy " + parentOfBonesToMove.childCount + " bones into " + currentPathInsideTargetArmature + "...");
 
             if (currentPathInsideTargetArmature == "/") {
                 throw new System.Exception("Current path cannot be slash! Use empty string for root");
             }
 
-            List<Transform> bonesToOperateOn = new List<Transform>();
+            List<MoveBoneOperation> moveBoneOperations = new List<MoveBoneOperation>();
 
             // need to copy the transforms because when we move the bones they no longer become our children (for some reason) so it fails
             foreach (Transform boneToMove in parentOfBonesToMove) {
-                bonesToOperateOn.Add(boneToMove);
+                moveBoneOperations.Add(new MoveBoneOperation() {
+                    bone = boneToMove,
+                    name = boneToMove.gameObject.name,
+                    path = Utils.GetGameObjectPath(boneToMove.gameObject)
+                });
             }
+            
+            string currentFullPathInsideTargetArmature = Utils.GetGameObjectPath(targetArmature.gameObject);
 
-            foreach (Transform boneToMove in bonesToOperateOn) {
-                string currentBoneName = boneToMove.gameObject.name;
-
-                Debug.Log("Attempting to move bone " + currentBoneName + "");
+            foreach (MoveBoneOperation moveBoneOperation in moveBoneOperations) {
+                Transform boneToMove = moveBoneOperation.bone;
+                string currentBoneName = moveBoneOperation.name;
+                string originalPath = currentPathInsideMesh + "/" + currentBoneName; 
 
                 string pathToTargetParentBone = currentPathInsideTargetArmature;
                 Transform targetParentBone = targetArmature.Find(pathToTargetParentBone);
-
-                Debug.Log("Searching bone in target \"" + pathToTargetParentBone + "\" for any similar bones to this one...");
+                
+                Debug.Log("Preparing to move bone \"" + originalPath + "\" into \"" + pathToTargetParentBone + "\"...");
 
                 if (targetParentBone == null) {
-                    throw new FailedToCopyBoneIntoArmature("Target parent bone does not exist at " + pathToTargetParentBone);
+                    throw new FailedToCopyBoneIntoArmature("Target parent bone does not exist") {
+                        pathToBone = originalPath,
+                        pathToTarget = currentFullPathInsideTargetArmature
+                    };
                 }
 
                 Transform newParent = null;
 
-                foreach (Transform boneInsideTargetParentBone in targetParentBone) {
-                    string boneName = boneInsideTargetParentBone.gameObject.name;
+                string currentBoneNameWithoutSuffix = existingSuffix != "" ? currentBoneName.Replace(existingSuffix, "") : currentBoneName;
 
-                    if (currentBoneName.Contains(boneName)) {
+                foreach (Transform boneInsideTargetParentBone in targetParentBone) {
+                    string boneNameToFind = boneInsideTargetParentBone.gameObject.name;
+
+                    if (currentBoneNameWithoutSuffix == boneNameToFind) {
                         newParent = boneInsideTargetParentBone;
                     }
                 }
@@ -105,30 +124,41 @@ namespace VRCAddonInstaller {
                 string newPathInsideTargetArmature;
 
                 if (newParent == null) {
-                    Debug.Log("Could not find any similar bones to this one so just dumping it into the target");
+                    if (IsFirstBone) {
+                        throw new FailedToCopyBoneIntoArmature("Failed to find a matching bone inside your avatar. Are you sure the armatures align?") {
+                            pathToBone = originalPath,
+                            pathToTarget = currentFullPathInsideTargetArmature
+                        };
+                    }
+
+                    Debug.Log("Failed to find any matching bone! Placing it into this one...");
                     newParent = targetParentBone;
 
                     newPathInsideTargetArmature = (currentPathInsideTargetArmature != "" ? currentPathInsideTargetArmature + "/" : "") + currentBoneName;
                 } else {
-                    Debug.Log("We found a similar bone! Placing it under... " + currentBoneName + " => " + newParent.gameObject.name);
+                    string newParentName = newParent.gameObject.name;
 
-                    newPathInsideTargetArmature = (currentPathInsideTargetArmature != "" ? currentPathInsideTargetArmature + "/" : "") + newParent.gameObject.name;
+                    Debug.Log("Match! \"" + currentBoneName + "\" into \"" + newParentName + "\"");
+
+                    newPathInsideTargetArmature = (currentPathInsideTargetArmature != "" ? currentPathInsideTargetArmature + "/" : "") + newParentName;
                 }
 
-                string originalPath = Utils.GetGameObjectPath(boneToMove.gameObject);
                 string newParentPath = Utils.GetGameObjectPath(newParent.gameObject);
 
                 if (isInDraftMode == false) {
                     boneToMove.SetParent(newParent);
                 }
 
+                IsFirstBone = false;
+
                 actionsToReturn.Add(new MoveBoneAction() {
                     originalPath = originalPath,
                     newParentPath = newParentPath
                 });
 
+                string newPathInsideMesh = currentPathInsideMesh + "/" + currentBoneName;
 
-                var newActions = CopyBonesIntoArmature(newPathInsideTargetArmature, targetArmature, boneToMove);
+                var newActions = CopyBonesIntoArmature(newPathInsideTargetArmature, targetArmature, boneToMove, newPathInsideMesh, existingSuffix);
                 actionsToReturn.AddRange(newActions);
             }
 
