@@ -1,3 +1,5 @@
+**Use another well maintained tool such as [VRCFury](https://vrcfury.com/)**
+
 # VRC Addon Installer
 
 A Unity plugin that automates adding and removing accessories on a VRChat avatar.
